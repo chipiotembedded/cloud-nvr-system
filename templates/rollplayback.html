@@ -1,0 +1,269 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cloud NVR Dashboard</title>
+
+<style>
+
+/* ===== GLOBAL ===== */
+body {
+    margin:0;
+    font-family: Arial, sans-serif;
+    background:#0f172a;
+    color:#fff;
+}
+
+/* ===== HEADER ===== */
+.header {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:15px;
+    background:#020617;
+}
+
+/* ===== BUTTONS ===== */
+.controls button {
+    padding:8px 15px;
+    margin-left:10px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    font-weight:bold;
+}
+
+.roll { background:#22c55e; }
+.full { background:#3b82f6; }
+
+/* ===== GRID ===== */
+.grid {
+    display:grid;
+    grid-template-columns: repeat(2,1fr);
+    gap:12px;
+    padding:10px;
+}
+/* ===== CAMERA CARD ===== */
+.cam {
+    position:relative;
+    background:#020617;
+    border-radius:10px;
+    overflow:hidden;
+    aspect-ratio:4/3;
+}
+
+.cam video {
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    background:black;
+}
+
+.title {
+    position:absolute;
+    top:10px;
+    left:10px;
+    background:rgba(0,0,0,0.6);
+    padding:4px 8px;
+    border-radius:5px;
+    font-size:13px;
+}
+
+/* ===== TIMELINE ===== */
+.timeline {
+    padding:10px;
+    background:#020617;
+}
+
+.timeline input {
+    width:100%;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <h2>📡 Cloud NVR Dashboard</h2>
+
+    <div class="controls">
+<button class="roll">Roll Playback</button>
+        <button class="full" onclick="window.location='/24hr'">24hr Playback</button>
+    </div>
+</div>
+
+<div class="grid">
+
+<div class="cam">
+<div class="title">Camera 104</div>
+<video id="cam104" muted autoplay playsinline></video>
+</div>
+
+<div class="cam">
+<div class="title">Camera 105</div>
+<video id="cam105" muted autoplay playsinline></video>
+</div>
+
+<div class="cam">
+<div class="title">Camera 106</div>
+<video id="cam106" muted autoplay playsinline></video>
+</div>
+
+<div class="cam"></div>
+
+</div>
+
+<div class="timeline">
+<input type="range" min="0" max="86400" value="0" id="timeline">
+</div>
+<script>
+
+window.onload = function () {
+
+const VIDEO_DURATION = 10;
+
+let startTimestamp = null;
+let endTimestamp = null;
+let currentTimestamp = null;
+
+let currentClips = {};
+let autoPlay = true;
+
+const slider = document.getElementById("timeline");
+
+/* ============================
+LOAD CLIPS
+============================ */
+
+function loadSynced() {
+
+    fetch(`/get_synced_clips?ts=${currentTimestamp || ''}`)
+    .then(res => res.json())
+    .then(data => {
+
+        console.log("SYNC:", data);
+
+        // 🔥 INIT ONCE
+        if (startTimestamp === null && data.min_ts) {
+
+            startTimestamp = data.min_ts;
+            endTimestamp = data.max_ts;
+
+            currentTimestamp = startTimestamp;
+
+            slider.min = 0;
+            slider.max = endTimestamp - startTimestamp;
+            slider.value = 0;
+
+            console.log("Slider initialized:", slider.min, slider.max);
+        }
+
+        if (!currentTimestamp) return;
+
+        let baseTime = currentTimestamp;
+
+        syncCamera("cam104", data.cam104, baseTime);
+        syncCamera("cam105", data.cam105, baseTime);
+        syncCamera("cam106", data.cam106, baseTime);
+
+    });
+}
+
+/* ============================
+   SYNC CAMERA
+============================ */
+
+function syncCamera(id, file, baseTime) {
+
+    if (!file) return;
+const video = document.getElementById(id);
+
+    let fileTime = parseInt(file.split("-")[1].split(".")[0]);
+
+    let offset = baseTime - fileTime;
+
+    if (offset < 0) offset = 0;
+    if (offset > VIDEO_DURATION) offset = VIDEO_DURATION - 0.5;
+
+    if (currentClips[id] === file) {
+        video.currentTime = offset;
+        return;
+    }
+
+    currentClips[id] = file;
+
+    video.src = `/video/${file}`;
+    video.load();
+
+    video.onloadeddata = () => {
+        video.currentTime = offset;
+        video.play().catch(()=>{});
+    };
+}
+
+/* ============================
+   🔥 SLIDER (FORCE WORKING)
+============================ */
+
+/* ============================
+   🔥 SLIDER (FINAL FIX)
+============================ */
+
+slider.addEventListener("input", function () {
+
+    if (!startTimestamp) {
+        console.log("Slider not ready yet");
+        return;
+    }
+
+    autoPlay = false;
+
+    // ✅ safer number conversion
+    let val = Number(this.value);
+// ✅ calculate timestamp properly
+    currentTimestamp = startTimestamp + val;
+
+    console.log("🎯 Slider →", val, "| Timestamp →", currentTimestamp);
+
+    // ✅ prevent unnecessary reload spam
+    clearTimeout(window.sliderDebounce);
+
+    window.sliderDebounce = setTimeout(() => {
+        loadSynced();
+    }, 200); // slight delay = smoother behavior
+});
+
+/* ============================
+   AUTO PLAY
+============================ */
+
+setInterval(() => {
+
+    if (autoPlay && currentTimestamp) {
+
+        currentTimestamp += 10;
+
+        if (currentTimestamp > endTimestamp) {
+            currentTimestamp = startTimestamp;
+        }
+
+        slider.value = currentTimestamp - startTimestamp;
+
+        loadSynced();
+    }
+
+}, 10000);
+
+/* ============================
+   INIT
+============================ */
+
+loadSynced();
+
+};
+
+</script>
+
+</body>
+</html>

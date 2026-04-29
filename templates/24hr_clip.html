@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>24hr Playback</title>
+<style>
+  body { background:#111; color:#fff; text-align:center; font-family:Arial; }
+  video { width:80%; margin-top:20px; }
+  input, button { padding:10px; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<h2>24hr Playback System</h2>
+
+<input type="datetime-local" id="timePicker">
+<button onclick="playVideo()">Play</button>
+
+<br>
+<video id="player" controls></video>
+
+<script>
+
+function playVideo() {
+    const input = document.getElementById("timePicker").value;
+
+    if (!input) {
+        alert("Select date and time");
+        return;
+    }
+
+    fetch(`/get_24hr_clip?time=${input}`)
+    .then(res => res.json())
+    .then(data => {
+
+        console.log("API:", data);
+
+        if (data.error) {
+            alert("Error loading clips");
+            return;
+        }
+
+        const player = document.getElementById("player");
+
+        const file1 = "/video/" + data.file1;
+const file2 = "/video/" + data.file2;
+        const offset = data.offset;
+
+        // 🔥 Load previous day
+        player.src = file1 + "?t=" + new Date().getTime();
+        player.load();
+
+        player.onloadedmetadata = function() {
+            player.currentTime = offset;
+            player.play();
+        };
+
+        // 🔥 Switch to next day automatically
+        player.onended = function() {
+            player.src = file2 + "?t=" + new Date().getTime();
+            player.load();
+            player.play();
+        };
+
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Error fetching video");
+    });
+}
+
+</script>
+
+</body>
+</html>
