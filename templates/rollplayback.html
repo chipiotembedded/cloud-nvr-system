@@ -1,269 +1,592 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Cloud NVR Dashboard</title>
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud NVR — Roll Playback</title>
 <style>
-
-/* ===== GLOBAL ===== */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+ 
+:root {
+  --bg:      #070b12;
+  --surface: #0d1420;
+  --panel:   #111927;
+  --border:  #1e2d42;
+  --accent:  #00d4ff;
+  --live:    #22c55e;
+  --warn:    #f59e0b;
+  --red:     #ef4444;
+  --text:    #e2eaf4;
+  --muted:   #4a6080;
+  --mono:    'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+ 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+ 
 body {
-    margin:0;
-    font-family: Arial, sans-serif;
-    background:#0f172a;
-    color:#fff;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
-
-/* ===== HEADER ===== */
-.header {
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:15px;
-    background:#020617;
+ 
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
 }
-
-/* ===== BUTTONS ===== */
-.controls button {
-    padding:8px 15px;
-    margin-left:10px;
-    border:none;
-    border-radius:6px;
-    cursor:pointer;
-    font-weight:bold;
+ 
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
 }
-
-.roll { background:#22c55e; }
-.full { background:#3b82f6; }
-
-/* ===== GRID ===== */
+ 
+.brand .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 8px var(--live);
+  animation: pulse 2s infinite;
+}
+ 
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+ 
+.nav-btns { display: flex; gap: 8px; }
+.nav-btns a {
+  padding: 7px 16px; border-radius: 6px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  text-decoration: none; border: 1px solid var(--border);
+  color: var(--muted); transition: all 0.2s;
+}
+.nav-btns a.active, .nav-btns a:hover {
+  background: var(--accent); color: #000; border-color: var(--accent);
+}
+.nav-btns a .nav-badge {
+  display: inline-block;
+  margin-left: 6px; padding: 1px 6px;
+  background: var(--red); color: #fff;
+  border-radius: 8px; font-size: 10px; font-weight: 700;
+  vertical-align: middle;
+}
+.nav-btns a.active .nav-badge { background: #000; color: var(--red); }
+ 
+.statusbar {
+  display: flex; gap: 24px;
+  padding: 8px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.statusbar span { display: flex; align-items: center; gap: 6px; }
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--live); animation: pulse 1.5s infinite;
+}
+ 
 .grid {
-    display:grid;
-    grid-template-columns: repeat(2,1fr);
-    gap:12px;
-    padding:10px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px; background: #000; padding: 2px;
 }
-/* ===== CAMERA CARD ===== */
-.cam {
-    position:relative;
-    background:#020617;
-    border-radius:10px;
-    overflow:hidden;
-    aspect-ratio:4/3;
+ 
+.cam-cell {
+  position: relative;
+  background: #000;
+  aspect-ratio: 16/9;
+  overflow: hidden;
 }
-
-.cam video {
-    width:100%;
-    height:100%;
-    object-fit:contain;
-    background:black;
+ 
+.cam-cell video {
+  width: 100%; height: 100%;
+  object-fit: contain; background: #000; display: block;
 }
-
-.title {
-    position:absolute;
-    top:10px;
-    left:10px;
-    background:rgba(0,0,0,0.6);
-    padding:4px 8px;
-    border-radius:5px;
-    font-size:13px;
+ 
+/* DVR timestamp — top left */
+.cam-ts {
+  position: absolute;
+  top: 10px; left: 10px;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 3px 8px; border-radius: 3px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: #fff; pointer-events: none; letter-spacing: 0.5px;
 }
-
-/* ===== TIMELINE ===== */
-.timeline {
-    padding:10px;
-    background:#020617;
+ 
+.cam-label {
+  position: absolute;
+  top: 10px; right: 44px;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--accent); pointer-events: none;
 }
-
-.timeline input {
-    width:100%;
+ 
+.cam-status {
+  position: absolute; top: 10px; right: 10px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted);
 }
-
+.cam-status.ok     { background: var(--live); box-shadow: 0 0 6px var(--live); }
+.cam-status.loading{ background: var(--warn); }
+.cam-status.error  { background: #ef4444; }
+ 
+.spinner-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.7);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.spinner-overlay.show { opacity: 1; }
+.spinner {
+  width: 32px; height: 32px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+ 
+.no-video-overlay {
+  position: absolute; inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  background: rgba(0,0,0,0.85);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.no-video-overlay.show { display: flex; }
+.no-video-overlay .icon { font-size: 28px; opacity: 0.3; }
+ 
+/* TIMELINE */
+.timeline-panel {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+}
+ 
+.tl-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+ 
+.tl-title {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+}
+ 
+.tl-timestamp { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+ 
+.tl-track {
+  position: relative; height: 32px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px; margin-bottom: 8px;
+  overflow: hidden; cursor: pointer;
+}
+ 
+.tl-playhead {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--accent); box-shadow: 0 0 6px var(--accent);
+  pointer-events: none; z-index: 10;
+}
+ 
+.clip-marker {
+  position: absolute; top: 4px; bottom: 4px;
+  background: rgba(0,212,255,0.18);
+  border-left: 2px solid rgba(0,212,255,0.5);
+  border-radius: 2px; cursor: pointer; transition: background 0.15s;
+}
+.clip-marker:hover { background: rgba(0,212,255,0.35); }
+.clip-marker.active { background: rgba(0,212,255,0.35); border-left-color: var(--live); }
+ 
+.tl-slider {
+  width: 100%; -webkit-appearance: none;
+  height: 3px; background: var(--border);
+  border-radius: 2px; outline: none; cursor: pointer;
+}
+.tl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent); cursor: pointer;
+}
+ 
+.tl-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 6px;
+}
+ 
+.controls {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap;
+}
+ 
+.btn {
+  padding: 7px 14px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--panel); color: var(--text);
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+ 
+.clip-info { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
 </style>
 </head>
-
 <body>
-
-<div class="header">
-    <h2>📡 Cloud NVR Dashboard</h2>
-
-    <div class="controls">
-<button class="roll">Roll Playback</button>
-        <button class="full" onclick="window.location='/24hr'">24hr Playback</button>
-    </div>
+ 
+<header>
+  <div class="brand"><div class="dot"></div>Cloud NVR</div>
+  <nav class="nav-btns">
+    <a href="/roll" class="active">Roll (10 min)</a>
+    <a href="/24hr">24hr Playback</a>
+    <a href="/live">Live</a>
+    <a href="/ai" id="nav-alerts">Alerts <span class="nav-badge" id="nav-badge" style="display:none">0</span></a>
+  </nav>
+</header>
+ 
+<div class="statusbar">
+  <span><div class="live-dot"></div> LIVE RECORDING</span>
+  <span id="sb-clips">— clips loaded</span>
+  <span id="sb-range">—</span>
 </div>
-
+ 
 <div class="grid">
-
-<div class="cam">
-<div class="title">Camera 104</div>
-<video id="cam104" muted autoplay playsinline></video>
+  <div class="cam-cell" id="cell-cam104">
+    <video id="vid-cam104" muted playsinline></video>
+    <div class="cam-ts" id="ts-cam104">—</div>
+    <div class="cam-label">CAM 104</div>
+    <div class="cam-status" id="status-cam104"></div>
+    <div class="spinner-overlay" id="spin-cam104"><div class="spinner"></div></div>
+    <div class="no-video-overlay" id="novid-cam104"><div class="icon">📷</div>No clip</div>
+  </div>
+  <div class="cam-cell" id="cell-cam105">
+    <video id="vid-cam105" muted playsinline></video>
+    <div class="cam-ts" id="ts-cam105">—</div>
+    <div class="cam-label">CAM 105</div>
+    <div class="cam-status" id="status-cam105"></div>
+    <div class="spinner-overlay" id="spin-cam105"><div class="spinner"></div></div>
+    <div class="no-video-overlay" id="novid-cam105"><div class="icon">📷</div>No clip</div>
+  </div>
+  <div class="cam-cell" id="cell-cam106">
+    <video id="vid-cam106" muted playsinline></video>
+    <div class="cam-ts" id="ts-cam106">—</div>
+    <div class="cam-label">CAM 106</div>
+    <div class="cam-status" id="status-cam106"></div>
+    <div class="spinner-overlay" id="spin-cam106"><div class="spinner"></div></div>
+    <div class="no-video-overlay" id="novid-cam106"><div class="icon">📷</div>No clip</div>
+  </div>
+  <div class="cam-cell" style="display:flex;align-items:center;justify-content:center;background:#070b12;">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);text-align:center;line-height:2;">
+      CHANNEL 4<br><span style="color:var(--border)">UNASSIGNED</span>
+    </div>
+  </div>
 </div>
 
-<div class="cam">
-<div class="title">Camera 105</div>
-<video id="cam105" muted autoplay playsinline></video>
-</div>
 
-<div class="cam">
-<div class="title">Camera 106</div>
-<video id="cam106" muted autoplay playsinline></video>
+<div class="timeline-panel">
+  <div class="tl-header">
+    <div class="tl-title">Timeline — rolling 10 min window</div>
+    <div class="tl-timestamp" id="tl-ts">—</div>
+  </div>
+ 
+  <div class="tl-track" id="tl-track">
+    <div class="tl-playhead" id="tl-playhead" style="left:100%"></div>
+  </div>
+ 
+  <input type="range" class="tl-slider" id="slider" min="0" max="86400" value="86400">
+ 
+  <div class="tl-labels">
+    <span id="lbl-start">—</span>
+    <span id="lbl-mid">—</span>
+    <span id="lbl-end">now</span>
+  </div>
+ 
+  <div class="controls">
+    <button class="btn active" id="btn-live" onclick="goLive()">⬤ LIVE</button>
+    <button class="btn" onclick="jumpRelative(-600)">− 10 min</button>
+    <button class="btn" onclick="jumpRelative(-60)">− 1 min</button>
+    <button class="btn" onclick="jumpRelative(60)">+ 1 min</button>
+    <button class="btn" onclick="jumpRelative(600)">+ 10 min</button>
+    <span class="clip-info" id="clip-info">—</span>
+  </div>
 </div>
-
-<div class="cam"></div>
-
-</div>
-
-<div class="timeline">
-<input type="range" min="0" max="86400" value="0" id="timeline">
-</div>
+ 
 <script>
-
-window.onload = function () {
-
-const VIDEO_DURATION = 10;
-
-let startTimestamp = null;
-let endTimestamp = null;
-let currentTimestamp = null;
-
-let currentClips = {};
-let autoPlay = true;
-
-const slider = document.getElementById("timeline");
-
-/* ============================
-LOAD CLIPS
-============================ */
-
-function loadSynced() {
-
-    fetch(`/get_synced_clips?ts=${currentTimestamp || ''}`)
-    .then(res => res.json())
+const CAMS          = ["cam104", "cam105", "cam106"];
+const CLIP_DURATION = 600;
+ 
+let minTs       = null;
+let maxTs       = null;
+let currentTs   = null;
+let isLive      = true;
+let loadedClips = {};
+let allTimeline = [];
+ 
+// Per-cam ticker intervals
+const camTickers = {};
+ 
+const slider = document.getElementById("slider");
+ 
+// ── FORMAT ──────────────────────────────────────────
+function fmtTime(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+}
+ 
+function fmtDT(ts) {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleString([], {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+}
+ 
+function fmtDVR(ts) {
+  const d  = new Date(ts * 1000);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${dd}-${mm}-${yy} ${hh}:${mi}:${ss}`;
+}
+ 
+// ── CAMERA STATUS ────────────────────────────────────
+function setCamStatus(cam, state) {
+  const el    = document.getElementById("status-" + cam);
+  const spin  = document.getElementById("spin-" + cam);
+  const novid = document.getElementById("novid-" + cam);
+  el.className = "cam-status";
+  spin.classList.remove("show");
+  novid.classList.remove("show");
+  if (state === "ok")      { el.classList.add("ok"); }
+  else if (state === "loading") { el.classList.add("loading"); spin.classList.add("show"); }
+  else if (state === "error")   { el.classList.add("error");   novid.classList.add("show"); }
+}
+ 
+// ── DVR TIMESTAMP TICKER ─────────────────────────────
+function startTicker(cam, clipStartTs) {
+  if (camTickers[cam]) clearInterval(camTickers[cam]);
+  const vid  = document.getElementById("vid-" + cam);
+  const tsEl = document.getElementById("ts-" + cam);
+  camTickers[cam] = setInterval(() => {
+    if (!vid.paused && !vid.ended) {
+      tsEl.textContent = fmtDVR(clipStartTs + Math.floor(vid.currentTime));
+    }
+  }, 500);
+}
+ 
+function stopTicker(cam) {
+  if (camTickers[cam]) { clearInterval(camTickers[cam]); delete camTickers[cam]; }
+}
+ 
+// ── SYNC ONE CAMERA ──────────────────────────────────
+function syncCamera(cam, camData) {
+  if (!camData || !camData.file) {
+    setCamStatus(cam, "error");
+    return;
+  }
+ 
+  const { file, offset, clip_start_ts } = camData;
+  const vid = document.getElementById("vid-" + cam);
+ 
+  // Same clip — just seek if drifted
+  if (loadedClips[cam] === file) {
+    if (Math.abs(vid.currentTime - offset) > 3) vid.currentTime = offset;
+    if (vid.paused) vid.play().catch(() => {});
+    return;
+  }
+ 
+  // New clip
+  loadedClips[cam] = file;
+  stopTicker(cam);
+  setCamStatus(cam, "loading");
+ 
+  vid.src = `/video/roll/${file}`;
+  vid.load();
+ 
+  vid.onloadeddata = () => {
+    vid.currentTime = offset;
+    vid.play()
+      .then(() => { setCamStatus(cam, "ok"); startTicker(cam, clip_start_ts); })
+      .catch(() => { setCamStatus(cam, "ok"); startTicker(cam, clip_start_ts); });
+  };
+ 
+  vid.onerror = () => {
+    setCamStatus(cam, "error");
+    stopTicker(cam);
+    loadedClips[cam] = null;
+  };
+ 
+  vid.onended = () => {
+    if (isLive) loadSynced(null);
+  };
+}
+ 
+// ── FETCH & APPLY ────────────────────────────────────
+function loadSynced(ts) {
+  const url = ts ? `/get_synced_clips?ts=${ts}` : `/get_synced_clips`;
+  fetch(url)
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
     .then(data => {
-
-        console.log("SYNC:", data);
-
-        // 🔥 INIT ONCE
-        if (startTimestamp === null && data.min_ts) {
-
-            startTimestamp = data.min_ts;
-            endTimestamp = data.max_ts;
-
-            currentTimestamp = startTimestamp;
-
-            slider.min = 0;
-            slider.max = endTimestamp - startTimestamp;
-            slider.value = 0;
-
-            console.log("Slider initialized:", slider.min, slider.max);
-        }
-
-        if (!currentTimestamp) return;
-
-        let baseTime = currentTimestamp;
-
-        syncCamera("cam104", data.cam104, baseTime);
-        syncCamera("cam105", data.cam105, baseTime);
-        syncCamera("cam106", data.cam106, baseTime);
-
-    });
+      if (!data.min_ts) return;
+ 
+      const firstLoad = minTs === null;
+      minTs = data.min_ts;
+      maxTs = data.max_ts;
+ 
+      if (firstLoad || isLive) {
+        currentTs = data.target || maxTs;
+      }
+ 
+      if (firstLoad) {
+        buildTimeline(data.timeline || []);
+      }
+ 
+      document.getElementById("sb-clips").textContent =
+        `${(data.timeline || []).length} clips loaded`;
+      document.getElementById("sb-range").textContent =
+        `${fmtDT(minTs)} → ${fmtDT(maxTs)}`;
+ 
+      if (data.timeline && data.timeline.length) {
+        allTimeline = data.timeline;
+        updateMarkers();
+      }
+ 
+      CAMS.forEach(cam => syncCamera(cam, data[cam]));
+      updateSlider();
+      updatePlayhead();
+ 
+      document.getElementById("tl-ts").textContent = fmtDT(currentTs);
+      document.getElementById("clip-info").textContent =
+        `Window: ${fmtTime(data.window_start)} → ${fmtTime(data.target)}`;
+    })
+    .catch(e => console.error("loadSynced error:", e));
 }
-
-/* ============================
-   SYNC CAMERA
-============================ */
-
-function syncCamera(id, file, baseTime) {
-
-    if (!file) return;
-const video = document.getElementById(id);
-
-    let fileTime = parseInt(file.split("-")[1].split(".")[0]);
-
-    let offset = baseTime - fileTime;
-
-    if (offset < 0) offset = 0;
-    if (offset > VIDEO_DURATION) offset = VIDEO_DURATION - 0.5;
-
-    if (currentClips[id] === file) {
-        video.currentTime = offset;
-        return;
-    }
-
-    currentClips[id] = file;
-
-    video.src = `/video/${file}`;
-    video.load();
-
-    video.onloadeddata = () => {
-        video.currentTime = offset;
-        video.play().catch(()=>{});
-    };
+ 
+// ── TIMELINE ────────────────────────────────────────
+function buildTimeline(times) {
+  allTimeline = times;
+  if (!minTs || !maxTs) return;
+ 
+  slider.min   = 0;
+  slider.max   = maxTs - minTs;
+  slider.value = slider.max;
+ 
+  document.getElementById("lbl-start").textContent = fmtDT(minTs);
+  document.getElementById("lbl-mid").textContent   = fmtDT(Math.floor((minTs + maxTs) / 2));
+  document.getElementById("lbl-end").textContent   = "now";
+  updateMarkers();
 }
-
-/* ============================
-   🔥 SLIDER (FORCE WORKING)
-============================ */
-
-/* ============================
-   🔥 SLIDER (FINAL FIX)
-============================ */
-
-slider.addEventListener("input", function () {
-
-    if (!startTimestamp) {
-        console.log("Slider not ready yet");
-        return;
-    }
-
-    autoPlay = false;
-
-    // ✅ safer number conversion
-    let val = Number(this.value);
-// ✅ calculate timestamp properly
-    currentTimestamp = startTimestamp + val;
-
-    console.log("🎯 Slider →", val, "| Timestamp →", currentTimestamp);
-
-    // ✅ prevent unnecessary reload spam
-    clearTimeout(window.sliderDebounce);
-
-    window.sliderDebounce = setTimeout(() => {
-        loadSynced();
-    }, 200); // slight delay = smoother behavior
+ 
+function updateMarkers() {
+  if (!minTs || !maxTs) return;
+  const track = document.getElementById("tl-track");
+  // keep playhead, remove old markers
+  const ph = document.getElementById("tl-playhead");
+  track.innerHTML = "";
+  track.appendChild(ph);
+ 
+  const span = maxTs - minTs;
+  allTimeline.forEach(t => {
+    const pct     = ((t - minTs) / span) * 100;
+    const w       = Math.max((CLIP_DURATION / span) * 100, 0.5);
+    const isActive = currentTs && t <= currentTs && t + CLIP_DURATION >= currentTs;
+    const m = document.createElement("div");
+    m.className   = "clip-marker" + (isActive ? " active" : "");
+    m.style.left  = pct + "%";
+    m.style.width = w + "%";
+    m.title       = fmtDT(t);
+    m.onclick     = () => seekToTs(t + 30);
+    track.appendChild(m);
+  });
+}
+ 
+function updateSlider() {
+  if (!minTs || !currentTs) return;
+  slider.value = Math.min(currentTs - minTs, parseInt(slider.max));
+}
+ 
+function updatePlayhead() {
+  if (!minTs || !maxTs || !currentTs) return;
+  const span = maxTs - minTs;
+  const pct  = Math.min(100, Math.max(0, ((currentTs - minTs) / span) * 100));
+  document.getElementById("tl-playhead").style.left = pct + "%";
+}
+ 
+// ── NAVIGATION ──────────────────────────────────────
+function seekToTs(ts) {
+  isLive    = false;
+  currentTs = Math.max(minTs, Math.min(maxTs, ts));
+  document.getElementById("btn-live").classList.remove("active");
+  loadedClips = {};
+  CAMS.forEach(cam => stopTicker(cam));
+loadSynced(currentTs);
+  updateMarkers();
+}
+ 
+function jumpRelative(delta) {
+  seekToTs((currentTs || maxTs) + delta);
+}
+ 
+function goLive() {
+  isLive    = true;
+  currentTs = maxTs;
+  loadedClips = {};
+  CAMS.forEach(cam => stopTicker(cam));
+  document.getElementById("btn-live").classList.add("active");
+  loadSynced(null);
+}
+ 
+slider.addEventListener("input", function() {
+  if (!minTs) return;
+  clearTimeout(window._sliderTimer);
+  window._sliderTimer = setTimeout(() => seekToTs(minTs + parseInt(this.value)), 300);
 });
-
-/* ============================
-   AUTO PLAY
-============================ */
-
-setInterval(() => {
-
-    if (autoPlay && currentTimestamp) {
-
-        currentTimestamp += 10;
-
-        if (currentTimestamp > endTimestamp) {
-            currentTimestamp = startTimestamp;
-        }
-
-        slider.value = currentTimestamp - startTimestamp;
-
-        loadSynced();
+ 
+// Click on track to seek
+document.getElementById("tl-track").addEventListener("click", function(e) {
+  if (!minTs || !maxTs) return;
+  const rect = this.getBoundingClientRect();
+  const pct  = (e.clientX - rect.left) / rect.width;
+  seekToTs(Math.floor(minTs + pct * (maxTs - minTs)));
+});
+ 
+// ── AUTO REFRESH ─────────────────────────────────────
+setInterval(() => { if (isLive) loadSynced(null); }, 10000);
+ 
+// ── ALERTS BADGE ─────────────────────────────────────
+async function updateAlertsBadge() {
+  try {
+    const r = await fetch('/ai/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    const badge = document.getElementById('nav-badge');
+    if (!badge) return;
+    if (s.unacked > 0) {
+      badge.textContent = s.unacked > 99 ? '99+' : s.unacked;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
     }
-
-}, 10000);
-
-/* ============================
-   INIT
-============================ */
-
-loadSynced();
-
-};
-
+  } catch (e) { /* AI may be offline; silent */ }
+}
+updateAlertsBadge();
+setInterval(updateAlertsBadge, 30000);
+ 
+// ── INIT ────────────────────────────────────────────
+loadSynced(null);
 </script>
-
 </body>
 </html>

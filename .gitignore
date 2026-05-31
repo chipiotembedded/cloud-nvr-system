@@ -1,3 +1,42 @@
-recordings/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+*.save
+*.save.*
+
+# Logs
+*.log
+
+# ML model weights (large binaries — install.sh re-downloads)
+*.pt
+*.onnx
+*.weights
+
+# AI runtime data (not source-controllable)
+/var/www/ai/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Duplicate: install.sh copies ai_dashboard.html into templates/ at deploy time.
+# Source of truth lives in ai/ai_dashboard.html, not templates/.
+templates/ai_dashboard.html
+
+# Local-only test files
+test.mp4
 *.mp4
-*.flv
+recordings/

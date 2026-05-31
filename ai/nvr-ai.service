@@ -1,0 +1,22 @@
+[Unit]
+Description=NVR AI Detector
+After=network.target nvr-playback.service
+Wants=nvr-playback.service
+
+[Service]
+Type=simple
+User=cloud
+WorkingDirectory=/home/cloud/cloud-nvr-system/ai
+Environment="PYTHONUNBUFFERED=1"
+Environment="YOLO_OFFLINE=1"
+ExecStart=/usr/bin/python3 /home/cloud/cloud-nvr-system/ai/detector.py /home/cloud/cloud-nvr-system/ai/config.yaml
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/cloud/ai_detector.log
+StandardError=append:/home/cloud/ai_detector.log
+# Memory limit so a runaway model doesn't OOM the VM
+MemoryHigh=2G
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

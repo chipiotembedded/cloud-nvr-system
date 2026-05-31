@@ -1,0 +1,78 @@
+# ─────────────────────────────────────────
+# AI Surveillance Config
+# Edit zone polygons after running tools/calibrate.py to pick coordinates
+# ─────────────────────────────────────────
+
+cameras:
+  cam104:
+    hls_path: /var/www/recordings/hls/cam104/index.m3u8
+    features: [people_count, loitering, left_behind]
+
+  cam105:
+    hls_path: /var/www/recordings/hls/cam105/index.m3u8
+    features: [people_count, loitering, left_behind]
+
+  cam106:
+    hls_path: /var/www/recordings/hls/cam106/index.m3u8
+    features: [people_count, loitering, left_behind, zone_restriction]
+    # Pixel coords are for a 720x576 frame.
+    # Upper = top half, Lower = bottom half. Tune after viewing a snapshot.
+    zones:
+      upper:
+        polygon: [[0, 0], [720, 0], [720, 288], [0, 288]]
+        # In v1 we alert on ANY person entering. Per-employee allow-list is v2 (face rec).
+        restricted: true
+        capacity: 6
+      lower:
+        polygon: [[0, 288], [720, 288], [720, 576], [0, 576]]
+        restricted: true
+        capacity: 4
+
+# Break hours — if a person leaves their camera's frame OUTSIDE these windows,
+# (and was present for >60s before), it's flagged.
+break_hours:
+  - start: "13:00"
+    end:   "14:00"
+  - start: "16:30"
+    end:   "16:45"
+
+# Office hours — outside these, the system skips most rules to avoid noise.
+office_hours:
+  start: "09:00"
+  end:   "19:00"
+
+thresholds:
+  loitering_seconds: 300         # person stationary > 5 min
+  left_behind_seconds: 180       # bag/laptop unattended > 3 min
+  zone_dwell_alert_seconds: 2    # must be in zone this long before alerting (debounce)
+  alert_cooldown_seconds: 30     # same alert type for same track won't refire for 30s
+  presence_min_seconds: 60       # person must be present this long before "left" alerts
+
+inference:
+  fps_per_camera: 2              # effective target (CPU constraint)
+  detection_interval_frames: 4   # YOLO every Nth frame; tracker fills the gaps
+  model: yolov8n.pt              # nano = fastest on CPU
+  confidence: 0.4
+  device: cpu
+  classes_of_interest:           # COCO class IDs
+    person: 0
+    backpack: 24
+    handbag: 26
+    suitcase: 28
+    chair: 56
+    laptop: 63
+    cell_phone: 67
+
+reid:
+  enabled: true
+  scope: within_camera           # v1: per-camera. v2: cross_camera
+  feature_dim: 512               # CLIP ViT-B/32 embedding size
+  similarity_threshold: 0.75
+  track_history_size: 200        # remember last N object embeddings per camera
+
+storage:
+  snapshot_dir: /var/www/ai/snapshots
+  db_path: /var/www/ai/alerts.db
+  snapshot_format: jpg
+  snapshot_quality: 80
+  retention_days: 14

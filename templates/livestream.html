@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud NVR — Live</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+ 
+:root {
+  --bg:      #070b12;
+  --surface: #0d1420;
+  --panel:   #111927;
+  --border:  #1e2d42;
+  --accent:  #00d4ff;
+  --live:    #22c55e;
+  --warn:    #f59e0b;
+  --red:     #ef4444;
+  --text:    #e2eaf4;
+  --muted:   #4a6080;
+  --mono:    'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+ 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--display);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+ 
+/* ── HEADER ── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+ 
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+}
+ 
+.brand .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 10px var(--red);
+  animation: pulse 1.5s infinite;
+}
+ 
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes spin  { to{transform:rotate(360deg)} }
+ 
+.nav-btns { display: flex; gap: 8px; }
+.nav-btns a {
+  padding: 7px 16px; border-radius: 6px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  text-decoration: none; border: 1px solid var(--border);
+  color: var(--muted); transition: all 0.2s;
+}
+.nav-btns a.active, .nav-btns a:hover {
+  background: var(--accent); color: #000; border-color: var(--accent);
+}
+.nav-btns a .nav-badge {
+  display: inline-block;
+  margin-left: 6px; padding: 1px 6px;
+  background: var(--red); color: #fff;
+  border-radius: 8px; font-size: 10px; font-weight: 700;
+  vertical-align: middle;
+}
+.nav-btns a.active .nav-badge { background: #000; color: var(--red); }
+ 
+/* ── STATUS BAR ── */
+.statusbar {
+  display: flex; gap: 24px; align-items: center;
+  padding: 8px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.statusbar span { display: flex; align-items: center; gap: 6px; }
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 6px var(--red);
+  animation: pulse 1s infinite;
+}
+ 
+/* ── GRID ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px; flex: 1;
+  background: #000; padding: 2px;
+}
+ 
+.cam-cell {
+  position: relative; background: #000;
+  aspect-ratio: 16/9; overflow: hidden;
+}
+ 
+.cam-cell video {
+  width: 100%; height: 100%;
+  object-fit: contain; background: #000; display: block;
+}
+ 
+.cam-label {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  padding: 4px 10px; border-radius: 4px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--accent); pointer-events: none;
+}
+ 
+.cam-badge {
+  position: absolute; top: 10px; right: 10px;
+  padding: 3px 8px; border-radius: 4px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 1px; pointer-events: none;
+  display: flex; align-items: center; gap: 5px;
+}
+.cam-badge.live-badge { background: var(--red); color: #fff; }
+.cam-badge.dvr-badge  { background: var(--warn); color: #000; }
+.bdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: pulse 1s infinite; }
+ 
+/* DVR timestamp overlay — like roll */
+.cam-ts {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.75); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 3px 10px; border-radius: 3px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: #fff; pointer-events: none; letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+ 
+.cam-time {
+  position: absolute; bottom: 10px; right: 10px;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  border: 1px solid var(--border);
+  padding: 3px 8px; border-radius: 4px;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  pointer-events: none;
+}
+ 
+.cam-status {
+  position: absolute; bottom: 10px; left: 10px;
+  width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+}
+.cam-status.ok      { background: var(--live); box-shadow: 0 0 6px var(--live); }
+.cam-status.error   { background: var(--red);  box-shadow: 0 0 6px var(--red); }
+.cam-status.loading { background: var(--warn); }
+ 
+.spinner-overlay {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.spinner-overlay.show { opacity: 1; }
+.spinner {
+  width: 32px; height: 32px;
+  border: 2px solid var(--border); border-top-color: var(--red);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+ 
+.offline-overlay {
+  position: absolute; inset: 0; display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; background: rgba(0,0,0,0.8);
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.offline-overlay.show { display: flex; }
+.offline-overlay .icon { font-size: 28px; opacity: 0.4; }
+ 
+.cam-cell.empty {
+  display: flex; align-items: center; justify-content: center; background: #070b12;
+}
+.cam-cell.empty .placeholder {
+  font-family: var(--mono); font-size: 11px;
+  color: var(--border); text-align: center; line-height: 2;
+}
+ 
+/* ── TIMELINE PANEL ── */
+.timeline-panel {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 16px 24px;
+}
+ 
+.tl-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+ 
+.tl-title {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+}
+ 
+.tl-timestamp { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+ 
+/* scrubber track */
+.tl-track {
+  position: relative; height: 32px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 4px; margin-bottom: 8px; overflow: hidden;
+  cursor: pointer;
+}
+ 
+.tl-live-edge {
+  position: absolute; top: 0; bottom: 0; right: 0;
+  width: 3px; background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+ 
+.tl-window {
+  position: absolute; top: 4px; bottom: 4px;
+  background: rgba(0,212,255,0.15);
+  border: 1px solid rgba(0,212,255,0.3);
+  border-radius: 2px; pointer-events: none;
+}
+ 
+.tl-playhead {
+  position: absolute; top: 0; bottom: 0;
+  width: 2px; background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  pointer-events: none;
+}
+ 
+.tl-slider {
+  width: 100%; -webkit-appearance: none;
+  height: 3px; background: var(--border);
+  border-radius: 2px; outline: none; cursor: pointer;
+}
+.tl-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent); cursor: pointer;
+}
+ 
+.tl-labels {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  margin-top: 6px;
+}
+ 
+.controls {
+  display: flex; align-items: center; gap: 12px; margin-top: 14px;
+}
+ 
+.btn {
+  padding: 7px 16px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--panel);
+  color: var(--text); font-family: var(--mono); font-size: 11px;
+  font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { background: var(--red); color: #fff; border-color: var(--red); }
+ 
+.delay-info {
+  margin-left: auto; font-family: var(--mono);
+  font-size: 11px; color: var(--muted);
+}
+</style>
+</head>
+<body>
+ 
+<header>
+  <div class="brand"><div class="dot"></div>Cloud NVR</div>
+  <nav class="nav-btns">
+    <a href="/roll">Roll (10 min)</a>
+    <a href="/24hr">24hr Playback</a>
+    <a href="/live" class="active">Live</a>
+    <a href="/ai" id="nav-alerts">Alerts <span class="nav-badge" id="nav-badge" style="display:none">0</span></a>
+  </nav>
+</header>
+ 
+<div class="statusbar">
+  <span><div class="live-dot"></div> LIVE STREAM</span>
+  <span id="sb-cams">0/3 cameras connected</span>
+  <span id="sb-time">—</span>
+</div>
+ 
+<div class="grid">
+ 
+  <div class="cam-cell">
+    <video id="vid-cam104" muted autoplay playsinline></video>
+    <div class="cam-label">CAM 104</div>
+    <div class="cam-badge live-badge" id="badge-cam104"><div class="bdot"></div><span id="badge-txt-cam104">LIVE</span></div>
+    <div class="cam-ts" id="ts-cam104" style="display:none">—</div>
+    <div class="cam-time" id="time-cam104">—</div>
+    <div class="cam-status" id="status-cam104"></div>
+    <div class="spinner-overlay show" id="spin-cam104"><div class="spinner"></div></div>
+    <div class="offline-overlay" id="offline-cam104"><div class="icon">📵</div>Stream offline</div>
+  </div>
+ 
+  <div class="cam-cell">
+    <video id="vid-cam105" muted autoplay playsinline></video>
+    <div class="cam-label">CAM 105</div>
+    <div class="cam-badge live-badge" id="badge-cam105"><div class="bdot"></div><span id="badge-txt-cam105">LIVE</span></div>
+    <div class="cam-ts" id="ts-cam105" style="display:none">—</div>
+    <div class="cam-time" id="time-cam105">—</div>
+    <div class="cam-status" id="status-cam105"></div>
+    <div class="spinner-overlay show" id="spin-cam105"><div class="spinner"></div></div>
+    <div class="offline-overlay" id="offline-cam105"><div class="icon">📵</div>Stream offline</div>
+  </div>
+ 
+  <div class="cam-cell">
+    <video id="vid-cam106" muted autoplay playsinline></video>
+    <div class="cam-label">CAM 106</div>
+    <div class="cam-badge live-badge" id="badge-cam106"><div class="bdot"></div><span id="badge-txt-cam106">LIVE</span></div>
+    <div class="cam-ts" id="ts-cam106" style="display:none">—</div>
+    <div class="cam-time" id="time-cam106">—</div>
+    <div class="cam-status" id="status-cam106"></div>
+    <div class="spinner-overlay show" id="spin-cam106"><div class="spinner"></div></div>
+    <div class="offline-overlay" id="offline-cam106"><div class="icon">📵</div>Stream offline</div>
+  </div>
+ 
+  <div class="cam-cell empty">
+    <div class="placeholder">CHANNEL 4<br><span style="color:var(--border)">UNASSIGNED</span></div>
+  </div>
+ 
+</div>
+ 
+<!-- TIMELINE — same as roll -->
+<div class="timeline-panel">
+  <div class="tl-header">
+    <div class="tl-title" id="tl-mode-label">Live — Rolling 10 min DVR window</div>
+    <div class="tl-timestamp" id="tl-ts">—</div>
+  </div>
+ 
+<div class="tl-track" id="tl-track" onclick="onTrackClick(event)">
+    <div class="tl-window"  id="tl-window"></div>
+    <div class="tl-playhead" id="tl-playhead"></div>
+    <div class="tl-live-edge"></div>
+  </div>
+ 
+  <input type="range" class="tl-slider" id="tl-slider" min="0" max="600" value="600">
+ 
+  <div class="tl-labels">
+    <span id="lbl-start">10 min ago</span>
+    <span id="lbl-mid">5 min ago</span>
+    <span id="lbl-end">now</span>
+  </div>
+ 
+  <div class="controls">
+    <button class="btn active" id="btn-goLive" onclick="goLive()">⬤ GO LIVE</button>
+    <button class="btn" onclick="seekRelative(-60)">−1 min</button>
+    <button class="btn" onclick="seekRelative(-30)">−30 sec</button>
+    <button class="btn" onclick="seekRelative(30)">+30 sec</button>
+    <button class="btn" onclick="seekRelative(60)">+1 min</button>
+    <div class="delay-info" id="delay-info">Live edge</div>
+  </div>
+</div>
+ 
+<script>
+// ── CONFIG ────────────────────────────────────────────
+const CAMS       = ["cam104", "cam105", "cam106"];
+const HLS_BASE   = `http://${location.hostname}:8080/hls`;
+const DVR_WINDOW = 600;   // 10 minutes
+ 
+// ── STATE ─────────────────────────────────────────────
+let mode      = 'live';
+let dvrOffset = 0;        // seconds behind live edge
+let hlsMap    = {};
+let camReady  = {};
+// Track each cam's stream start wall-clock time
+let camStartTs = {};      // cam → unix timestamp when HLS stream started
+ 
+const slider = document.getElementById("tl-slider");
+ 
+// ── FORMAT ────────────────────────────────────────────
+function fmtHHMMSS(date) {
+  return date.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+ 
+function fmtDVR(date) {
+  const dd = String(date.getDate()).padStart(2,'0');
+  const mm = String(date.getMonth()+1).padStart(2,'0');
+  const yy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2,'0');
+  const mi = String(date.getMinutes()).padStart(2,'0');
+  const ss = String(date.getSeconds()).padStart(2,'0');
+  return `${dd}-${mm}-${yy} ${hh}:${mi}:${ss}`;
+}
+ 
+function fmtDelay(sec) {
+  if (sec <= 2) return "Live edge";
+  if (sec < 60) return `-${Math.round(sec)}s`;
+  return `-${Math.floor(sec/60)}m ${Math.round(sec%60)}s`;
+}
+ 
+// ── MODE ──────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  const isLive = m === 'live';
+  document.getElementById("btn-goLive").classList.toggle("active", isLive);
+  document.getElementById("tl-mode-label").textContent =
+    isLive ? "Live — Rolling 10 min DVR window" : "DVR — Scrubbing last 10 minutes";
+ 
+  CAMS.forEach(cam => {
+    const badge    = document.getElementById("badge-" + cam);
+    const badgeTxt = document.getElementById("badge-txt-" + cam);
+    const tsEl     = document.getElementById("ts-" + cam);
+    if (isLive) {
+      badge.className = "cam-badge live-badge";
+      badgeTxt.textContent = "LIVE";
+      tsEl.style.display = "none";
+    } else {
+      badge.className = "cam-badge dvr-badge";
+      badgeTxt.textContent = "DVR";
+      tsEl.style.display = "block";
+    }
+  });
+}
+ 
+// ── GO LIVE ───────────────────────────────────────────
+function goLive() {
+  dvrOffset = 0;
+  slider.value = DVR_WINDOW;
+  setMode('live');
+  updateTimeline();
+  CAMS.forEach(cam => seekCamToOffset(cam, 0));
+}
+ 
+// ── SEEK RELATIVE ─────────────────────────────────────
+function seekRelative(delta) {
+  setMode('dvr');
+  dvrOffset = Math.max(2, Math.min(DVR_WINDOW - 2, dvrOffset - delta));
+  slider.value = DVR_WINDOW - dvrOffset;
+  updateTimeline();
+  CAMS.forEach(cam => seekCamToOffset(cam, dvrOffset));
+}
+ 
+// ── TRACK CLICK ───────────────────────────────────────
+function onTrackClick(e) {
+  const track = document.getElementById("tl-track");
+  const pct   = e.offsetX / track.clientWidth;
+  const sec   = Math.round(pct * DVR_WINDOW);
+  dvrOffset   = DVR_WINDOW - sec;
+  slider.value = sec;
+  setMode('dvr');
+  updateTimeline();
+  CAMS.forEach(cam => seekCamToOffset(cam, dvrOffset));
+}
+ 
+// ── SLIDER ────────────────────────────────────────────
+slider.addEventListener("input", function() {
+  const sec = parseInt(this.value);
+  dvrOffset = DVR_WINDOW - sec;
+  setMode('dvr');
+  clearTimeout(window._sliderT);
+  window._sliderT = setTimeout(() => {
+    updateTimeline();
+    CAMS.forEach(cam => seekCamToOffset(cam, dvrOffset));
+  }, 200);
+});
+ 
+// ── SEEK CAMERA ───────────────────────────────────────
+function seekCamToOffset(cam, offsetSec) {
+  const hls = hlsMap[cam];
+  const vid = document.getElementById("vid-" + cam);
+  if (!hls || !vid || !camReady[cam]) return;
+ 
+try {
+    const liveEdge = hls.liveSyncPosition || (vid.duration - 2);
+    if (!liveEdge || isNaN(liveEdge)) return;
+    const target = Math.max(0, liveEdge - offsetSec);
+    vid.currentTime = target;
+    if (vid.paused) vid.play().catch(() => {});
+  } catch(e) {
+    console.warn("seek failed:", e);
+  }
+}
+ 
+// ── UPDATE TIMELINE UI ────────────────────────────────
+function updateTimeline() {
+  const now   = new Date();
+  const start = new Date(now - DVR_WINDOW * 1000);
+  const cur   = new Date(now - dvrOffset * 1000);
+ 
+  document.getElementById("lbl-start").textContent = fmtHHMMSS(start);
+  document.getElementById("lbl-mid").textContent   = fmtHHMMSS(new Date(now - DVR_WINDOW/2*1000));
+  document.getElementById("lbl-end").textContent   = fmtHHMMSS(now);
+  document.getElementById("tl-ts").textContent     = fmtHHMMSS(cur);
+  document.getElementById("delay-info").textContent = fmtDelay(dvrOffset);
+ 
+  // Playhead
+  const pct = ((DVR_WINDOW - dvrOffset) / DVR_WINDOW) * 100;
+  document.getElementById("tl-playhead").style.left = pct + "%";
+  document.getElementById("tl-window").style.left   = "0%";
+  document.getElementById("tl-window").style.width  = pct + "%";
+ 
+  // Update DVR timestamp overlay on each camera
+  CAMS.forEach(cam => {
+    document.getElementById("ts-" + cam).textContent = fmtDVR(cur);
+    document.getElementById("time-" + cam).textContent = fmtHHMMSS(cur);
+  });
+}
+ 
+// ── STATUS ────────────────────────────────────────────
+function setStatus(cam, state) {
+  const stat   = document.getElementById("status-" + cam);
+  const spin   = document.getElementById("spin-" + cam);
+  const offlin = document.getElementById("offline-" + cam);
+  stat.className = "cam-status";
+ 
+  if (state === "ok") {
+    stat.classList.add("ok");
+    spin.classList.remove("show");
+    offlin.classList.remove("show");
+    camReady[cam] = true;
+  } else if (state === "loading") {
+    stat.classList.add("loading");
+    spin.classList.add("show");
+    offlin.classList.remove("show");
+    camReady[cam] = false;
+  } else {
+    stat.classList.add("error");
+    spin.classList.remove("show");
+    offlin.classList.add("show");
+    camReady[cam] = false;
+  }
+}
+ 
+// ── INIT CAMERA ───────────────────────────────────────
+function initCamera(cam) {
+  const video = document.getElementById("vid-" + cam);
+  const url   = `${HLS_BASE}/${cam}/index.m3u8`;
+ 
+  setStatus(cam, "loading");
+ 
+  if (hlsMap[cam]) {
+    hlsMap[cam].destroy();
+    delete hlsMap[cam];
+  }
+ 
+  if (!Hls.isSupported() && !video.canPlayType('application/vnd.apple.mpegurl')) {
+    setStatus(cam, "error");
+    return;
+  }
+ 
+  if (Hls.isSupported()) {
+    const hls = new Hls({
+      // Keep 10-min back buffer so DVR scrubbing works
+      backBufferLength:            DVR_WINDOW,
+      maxBufferLength:             DVR_WINDOW,
+      liveSyncDurationCount:       3,
+      liveMaxLatencyDurationCount: 10,
+      lowLatencyMode:              false,
+      autoStartLoad:               true,
+      manifestLoadingTimeOut:      10000,
+      manifestLoadingMaxRetry:     10,
+      manifestLoadingRetryDelay:   1000,
+    });
+ 
+    hlsMap[cam] = hls;
+    hls.loadSource(url);
+    hls.attachMedia(video);
+ 
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      // Record stream start time
+      camStartTs[cam] = Math.floor(Date.now() / 1000);
+ 
+      // In DVR mode seek back, else go to live edge
+      if (mode === 'dvr' && dvrOffset > 0) {
+        setTimeout(() => seekCamToOffset(cam, dvrOffset), 500);
+      } else {
+        // Live — go to live edge
+        if (hls.liveSyncPosition) {
+          video.currentTime = hls.liveSyncPosition;
+        }
+      }
+      video.play().catch(() => {});
+      setStatus(cam, "ok");
+    });
+ 
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      if (data.fatal) {
+        setStatus(cam, "error");
+        setTimeout(() => initCamera(cam), 5000);
+      }
+    });
+ 
+  } else {
+    // Safari native HLS
+    video.src = url;
+    video.addEventListener('loadedmetadata', () => {
+      video.play().catch(() => {});
+      setStatus(cam, "ok");
+      camReady[cam] = true;
+    });
+    video.addEventListener('error', () => {
+      setStatus(cam, "error");
+      setTimeout(() => initCamera(cam), 5000);
+    });
+  }
+}
+ 
+// ── STATUS BAR ────────────────────────────────────────
+function updateStatusBar() {
+  const ok = CAMS.filter(c => camReady[c]).length;
+  document.getElementById("sb-cams").textContent = `${ok}/${CAMS.length} cameras connected`;
+  document.getElementById("sb-time").textContent = fmtHHMMSS(new Date());
+}
+ 
+// ── LIVE TICK ─────────────────────────────────────────
+function tickLive() {
+  if (mode === 'live') updateTimeline();
+}
+ 
+// ── ALERTS BADGE ─────────────────────────────────────
+async function updateAlertsBadge() {
+  try {
+    const r = await fetch('/ai/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    const badge = document.getElementById('nav-badge');
+    if (!badge) return;
+    if (s.unacked > 0) {
+      badge.textContent = s.unacked > 99 ? '99+' : s.unacked;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) { /* AI may be offline; silent */ }
+}
+updateAlertsBadge();
+setInterval(updateAlertsBadge, 30000);
+ 
+// ── INIT ──────────────────────────────────────────────
+CAMS.forEach(cam => initCamera(cam));
+updateTimeline();
+setInterval(tickLive, 1000);
+setInterval(updateStatusBar, 2000);
+updateStatusBar();
+</script>
+</body>
+</html>
+

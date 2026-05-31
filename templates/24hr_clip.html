@@ -2,74 +2,534 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>24hr Playback</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud NVR — 24hr Playback</title>
 <style>
-  body { background:#111; color:#fff; text-align:center; font-family:Arial; }
-  video { width:80%; margin-top:20px; }
-  input, button { padding:10px; margin-top:20px; }
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap');
+ 
+:root {
+  --bg:      #070b12;
+  --surface: #0d1420;
+  --panel:   #111927;
+  --border:  #1e2d42;
+  --accent:  #00d4ff;
+  --live:    #22c55e;
+  --warn:    #f59e0b;
+  --red:     #ef4444;
+  --text:    #e2eaf4;
+  --muted:   #4a6080;
+  --mono:    'JetBrains Mono', monospace;
+  --display: 'Syne', sans-serif;
+}
+ 
+* { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--display); min-height: 100vh;
+  display: flex; flex-direction: column;
+}
+ 
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+ 
+.brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; }
+.brand .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--warn); box-shadow: 0 0 8px var(--warn);
+}
+ 
+.nav-btns { display: flex; gap: 8px; }
+.nav-btns a {
+  padding: 7px 16px; border-radius: 6px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  text-decoration: none; border: 1px solid var(--border);
+  color: var(--muted); transition: all 0.2s;
+}
+.nav-btns a.active, .nav-btns a:hover {
+  background: var(--accent); color: #000; border-color: var(--accent);
+}
+.nav-btns a .nav-badge {
+  display: inline-block;
+  margin-left: 6px; padding: 1px 6px;
+  background: var(--red); color: #fff;
+  border-radius: 8px; font-size: 10px; font-weight: 700;
+  vertical-align: middle;
+}
+.nav-btns a.active .nav-badge { background: #000; color: var(--red); }
+ 
+.main { display: flex; flex: 1; overflow: hidden; }
+ 
+/* SIDEBAR */
+.sidebar {
+  width: 280px; background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px; display: flex; flex-direction: column;
+  gap: 12px; overflow-y: auto;
+}
+ 
+.sidebar-title {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px;
+}
+ 
+label { display: block; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+ 
+select, input[type="datetime-local"] {
+  width: 100%; padding: 9px 12px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text);
+  font-family: var(--mono); font-size: 12px; outline: none;
+}
+select:focus, input:focus { border-color: var(--accent); }
+input::-webkit-calendar-picker-indicator { filter: invert(0.6); cursor: pointer; }
+ 
+.btn-play {
+  width: 100%; padding: 11px;
+  background: var(--accent); color: #000; border: none;
+  border-radius: 6px; font-family: var(--mono);
+  font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.btn-play:hover { opacity: 0.85; }
+.btn-play:disabled { opacity: 0.4; cursor: not-allowed; }
+ 
+.info-box {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px;
+  font-family: var(--mono); font-size: 11px; line-height: 2; color: var(--muted);
+}
+.info-box .val { color: var(--text); float: right; }
+ 
+.error-msg {
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 6px; padding: 10px 12px;
+  font-family: var(--mono); font-size: 11px; color: #f87171; display: none;
+}
+.error-msg.show { display: block; }
+ 
+.section-title {
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+}
+ 
+.chunk-list {
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 220px; overflow-y: auto;
+}
+ 
+.chunk-item {
+  padding: 7px 10px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 4px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  cursor: pointer; transition: all 0.15s;
+  display: flex; align-items: center; gap: 8px;
+}
+.chunk-item:hover { border-color: var(--accent); color: var(--accent); }
+.chunk-item.active {
+  background: rgba(0,212,255,0.1);
+  border-color: var(--accent); color: var(--accent);
+}
+.chunk-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border); flex-shrink: 0;
+}
+.chunk-item.active .chunk-dot { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
+ 
+/* VIDEO AREA */
+.video-area { flex: 1; display: flex; flex-direction: column; background: #000; min-width: 0; }
+ 
+.cam-tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); }
+.cam-tab {
+  padding: 10px 20px; font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.cam-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+ 
+.video-wrapper {
+  position: relative; flex: 1;
+  display: flex; align-items: center; justify-content: center; background: #000;
+}
+ 
+video#player {
+  width: 100%; height: 100%;
+  object-fit: contain; max-height: calc(100vh - 250px);
+}
+ 
+.dvr-ts {
+  position: absolute; top: 12px; left: 12px;
+  background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.08);
+  padding: 4px 10px; border-radius: 3px;
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: #fff; pointer-events: none; display: none;
+}
+ 
+.overlay-msg {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: var(--muted); font-family: var(--mono); font-size: 13px; pointer-events: none;
+}
+.overlay-msg .icon { font-size: 40px; opacity: 0.3; }
+ 
+/* BOTTOM BAR */
+.bottom-bar {
+  background: var(--surface); border-top: 1px solid var(--border); padding: 12px 20px;
+}
+ 
+.progress-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+ 
+.time-lbl { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+ 
+.progress-track {
+  flex: 1; height: 4px; background: var(--border);
+  border-radius: 2px; cursor: pointer; position: relative;
+}
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.1s; }
+ 
+.controls-row { display: flex; gap: 8px; align-items: center; }
+ 
+.btn {
+  padding: 6px 14px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+ 
+.chunk-info-lbl { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
 </style>
 </head>
 <body>
-
-<h2>24hr Playback System</h2>
-
-<input type="datetime-local" id="timePicker">
-<button onclick="playVideo()">Play</button>
-
-<br>
-<video id="player" controls></video>
-
+ 
+<header>
+  <div class="brand"><div class="dot"></div>Cloud NVR</div>
+  <nav class="nav-btns">
+    <a href="/roll">Roll (10 min)</a>
+    <a href="/24hr" class="active">24hr Playback</a>
+    <a href="/live">Live</a>
+    <a href="/ai" id="nav-alerts">Alerts <span class="nav-badge" id="nav-badge" style="display:none">0</span></a>
+  </nav>
+</header>
+ 
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-title">Playback Settings</div>
+ 
+    <div>
+      <label>Camera</label>
+      <select id="cam-select" onchange="onCamChange()">
+        <option value="cam104">Camera 104</option>
+        <option value="cam105">Camera 105</option>
+        <option value="cam106">Camera 106</option>
+      </select>
+    </div>
+ 
+    <div>
+      <label>Date & Time</label>
+      <input type="datetime-local" id="timePicker">
+    </div>
+ 
+    <button class="btn-play" id="btn-play" onclick="playVideo()">▶ PLAY</button>
+ 
+    <div class="error-msg" id="error-msg"></div>
+ 
+    <div class="info-box">
+      <div>Camera      <span class="val" id="inf-cam">—</span></div>
+      <div>Chunk start <span class="val" id="inf-start">—</span></div>
+      <div>Seek offset <span class="val" id="inf-offset">—</span></div>
+      <div>Status      <span class="val" id="inf-status">idle</span></div>
+    </div>
+ 
+    <div class="section-title">Available Recordings</div>
+    <div class="chunk-list" id="chunk-list">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px;">
+        Select a camera to load recordings
+      </div>
+    </div>
+  </div>
+ 
+  <!-- VIDEO -->
+  <div class="video-area">
+    <div class="cam-tabs">
+      <div class="cam-tab active" onclick="switchCam('cam104',this)">CAM 104</div>
+      <div class="cam-tab" onclick="switchCam('cam105',this)">CAM 105</div>
+      <div class="cam-tab" onclick="switchCam('cam106',this)">CAM 106</div>
+    </div>
+ 
+    <div class="video-wrapper">
+      <video id="player" controls></video>
+      <div class="dvr-ts" id="dvr-ts">—</div>
+      <div class="overlay-msg" id="overlay">
+        <div class="icon">⏸</div>
+        Select a camera and time, then press Play
+      </div>
+    </div>
+ 
+    <div class="bottom-bar">
+      <div class="progress-row">
+        <span class="time-lbl" id="lbl-cur">00:00</span>
+        <div class="progress-track" onclick="seekByClick(event)">
+          <div class="progress-fill" id="prog"></div>
+        </div>
+        <span class="time-lbl" id="lbl-dur">—</span>
+      </div>
+      <div class="controls-row">
+        <button class="btn" onclick="skipSec(-300)">− 5 min</button>
+        <button class="btn" onclick="skipSec(-60)">− 1 min</button>
+        <button class="btn" onclick="skipSec(60)">+ 1 min</button>
+        <button class="btn" onclick="skipSec(300)">+ 5 min</button>
+        <span class="chunk-info-lbl" id="chunk-info">—</span>
+      </div>
+    </div>
+  </div>
+</div>
+ 
 <script>
-
-function playVideo() {
-    const input = document.getElementById("timePicker").value;
-
-    if (!input) {
-        alert("Select date and time");
-        return;
-    }
-
-    fetch(`/get_24hr_clip?time=${input}`)
-    .then(res => res.json())
+const player  = document.getElementById("player");
+const overlay = document.getElementById("overlay");
+const errMsg  = document.getElementById("error-msg");
+const btnPlay = document.getElementById("btn-play");
+const dvrTs   = document.getElementById("dvr-ts");
+ 
+let currentData   = null;
+let activeChunkTs = null;
+let tsInterval    = null;
+ 
+// Default to 1 hour ago
+const now = new Date();
+now.setHours(now.getHours() - 1);
+document.getElementById("timePicker").value = now.toISOString().slice(0,16);
+ 
+// Load chunks on start
+loadChunks("cam104");
+ 
+// ── FORMAT ───────────────────────────────────────────
+function fmtDVR(ts) {
+  const d  = new Date(ts * 1000);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mi = String(d.getMinutes()).padStart(2,'0');
+  const ss = String(d.getSeconds()).padStart(2,'0');
+  return `${dd}-${mm}-${yy} ${hh}:${mi}:${ss}`;
+}
+ 
+function fmtHMS(sec) {
+  sec = Math.floor(sec);
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function fmtShort(ts) {
+  return new Date(ts*1000).toLocaleString([],{
+    month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'
+  });
+}
+ 
+// ── ERROR ─────────────────────────────────────────────
+function showError(msg) { errMsg.textContent = msg; errMsg.classList.add("show"); }
+function clearError()   { errMsg.classList.remove("show"); }
+ 
+// ── INFO ──────────────────────────────────────────────
+function setInfo(cam, startTs, offset, status) {
+  document.getElementById("inf-cam").textContent    = cam || "—";
+  document.getElementById("inf-start").textContent  = startTs ? fmtShort(startTs) : "—";
+  document.getElementById("inf-offset").textContent = offset !== null ? offset + "s" : "—";
+  document.getElementById("inf-status").textContent = status;
+}
+ 
+// ── LOAD CHUNKS SIDEBAR ───────────────────────────────
+function loadChunks(cam) {
+  fetch(`/get_24hr_dates?cam=${cam}`)
+    .then(r => r.json())
     .then(data => {
+      const list = document.getElementById("chunk-list");
+      list.innerHTML = "";
+ 
+      if (!data.chunks || data.chunks.length === 0) {
+        list.innerHTML = `<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:6px;">No recordings found</div>`;
+        return;
+      }
 
-        console.log("API:", data);
-
-        if (data.error) {
-            alert("Error loading clips");
-            return;
-        }
-
-        const player = document.getElementById("player");
-
-        const file1 = "/video/" + data.file1;
-const file2 = "/video/" + data.file2;
-        const offset = data.offset;
-
-        // 🔥 Load previous day
-        player.src = file1 + "?t=" + new Date().getTime();
-        player.load();
-
-        player.onloadedmetadata = function() {
-            player.currentTime = offset;
-            player.play();
+ 
+      // newest first
+      const chunks = [...data.chunks].reverse();
+      chunks.forEach(chunk => {
+        const item = document.createElement("div");
+        item.className = "chunk-item" + (chunk.ts === activeChunkTs ? " active" : "");
+        item.dataset.ts = chunk.ts;
+        item.innerHTML  = `<div class="chunk-dot"></div>${chunk.label}`;
+        item.onclick = () => {
+          const dt = new Date(chunk.ts * 1000).toISOString().slice(0,16);
+          document.getElementById("timePicker").value = dt;
+          playVideo();
         };
-
-        // 🔥 Switch to next day automatically
-        player.onended = function() {
-            player.src = file2 + "?t=" + new Date().getTime();
-            player.load();
-            player.play();
-        };
-
+        list.appendChild(item);
+      });
     })
-    .catch(err => {
-        console.error(err);
-        alert("Error fetching video");
+    .catch(e => console.error("loadChunks:", e));
+}
+ 
+// ── TICKER ────────────────────────────────────────────
+function startTicker(chunkStartTs) {
+  if (tsInterval) clearInterval(tsInterval);
+  dvrTs.style.display = "block";
+  tsInterval = setInterval(() => {
+    dvrTs.textContent = fmtDVR(chunkStartTs + Math.floor(player.currentTime || 0));
+  }, 500);
+}
+ 
+function stopTicker() {
+  if (tsInterval) { clearInterval(tsInterval); tsInterval = null; }
+  dvrTs.style.display = "none";
+}
+ 
+// ── PLAY ──────────────────────────────────────────────
+function playVideo() {
+  clearError();
+  const time = document.getElementById("timePicker").value;
+  const cam  = document.getElementById("cam-select").value;
+  if (!time) { showError("Please select a date and time."); return; }
+ 
+  btnPlay.disabled    = true;
+  btnPlay.textContent = "Loading…";
+  overlay.style.display = "none";
+  stopTicker();
+  setInfo(cam, null, null, "fetching…");
+ 
+  fetch(`/get_24hr_clip?time=${encodeURIComponent(time)}&cam=${cam}`)
+    .then(r => r.json())
+    .then(data => {
+      btnPlay.disabled    = false;
+      btnPlay.textContent = "▶ PLAY";
+ 
+      if (data.error) {
+        showError(data.error);
+        overlay.style.display = "flex";
+        setInfo(cam, null, null, "error");
+        return;
+      }
+ 
+      currentData   = data;
+      activeChunkTs = data.file1_ts;
+      loadChunks(cam);
+ 
+      document.getElementById("chunk-info").textContent =
+        `1hr chunks · playing from ${fmtShort(data.file1_ts)}`;
+ 
+      setInfo(cam, data.file1_ts, data.offset, "loading…");
+      loadClip(`/video/24hr/${data.file1}`, data.offset, data.file1_ts, data);
+    })
+    .catch(e => {
+      btnPlay.disabled    = false;
+      btnPlay.textContent = "▶ PLAY";
+      showError("Network error: " + e.message);
+      overlay.style.display = "flex";
     });
 }
-
+ 
+// ── LOAD CLIP ─────────────────────────────────────────
+function loadClip(src, offset, chunkStartTs, data) {
+  player.src = src;
+  player.load();
+ 
+  player.onloadedmetadata = () => {
+    player.currentTime = offset || 0;
+    player.play().catch(() => {});
+    setInfo(document.getElementById("cam-select").value, chunkStartTs, offset, "playing");
+    startTicker(chunkStartTs);
+    document.getElementById("lbl-dur").textContent = fmtHMS(player.duration);
+  };
+ 
+  player.ontimeupdate = () => {
+    if (player.duration) {
+      document.getElementById("prog").style.width =
+        (player.currentTime / player.duration * 100) + "%";
+      document.getElementById("lbl-cur").textContent = fmtHMS(player.currentTime);
+    }
+  };
+ 
+  // Auto-chain to next chunk
+  player.onended = () => {
+    if (!data || !data.file2) {
+      setInfo(document.getElementById("cam-select").value, null, null, "ended");
+      stopTicker();
+      return;
+    }
+    stopTicker();
+    const cam    = document.getElementById("cam-select").value;
+    const nextTs = chunkStartTs + (data.chunk_duration || 3600) + 5;
+    const dt     = new Date(nextTs * 1000).toISOString().slice(0,16);
+ 
+    fetch(`/get_24hr_clip?time=${encodeURIComponent(dt)}&cam=${cam}`)
+      .then(r => r.json())
+      .then(next => {
+        if (next.error) { setInfo(cam, null, null, "ended"); return; }
+        currentData   = next;
+        activeChunkTs = next.file1_ts;
+        loadChunks(cam);
+        loadClip(`/video/24hr/${next.file1}`, 0, next.file1_ts, next);
+      })
+      .catch(() => setInfo(cam, null, null, "ended"));
+  };
+ 
+  player.onerror = () => {
+    showError("Failed to load video.");
+    overlay.style.display = "flex";
+    stopTicker();
+    setInfo(document.getElementById("cam-select").value, null, null, "error");
+  };
+}
+ 
+// ── CONTROLS ──────────────────────────────────────────
+function skipSec(delta) {
+  player.currentTime = Math.max(0, Math.min(player.duration || 0, player.currentTime + delta));
+}
+ 
+function seekByClick(e) {
+  const track = e.currentTarget;
+  const pct   = (e.clientX - track.getBoundingClientRect().left) / track.offsetWidth;
+  if (player.duration) player.currentTime = pct * player.duration;
+}
+ 
+function switchCam(cam, el) {
+  document.getElementById("cam-select").value = cam;
+  document.querySelectorAll(".cam-tab").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+  loadChunks(cam);
+  if (currentData) playVideo();
+}
+function onCamChange() {
+  const cam = document.getElementById("cam-select").value;
+  loadChunks(cam);
+}
+ 
+// ── ALERTS BADGE ─────────────────────────────────────
+async function updateAlertsBadge() {
+  try {
+    const r = await fetch('/ai/stats');
+    if (!r.ok) return;
+    const s = await r.json();
+    const badge = document.getElementById('nav-badge');
+    if (!badge) return;
+    if (s.unacked > 0) {
+      badge.textContent = s.unacked > 99 ? '99+' : s.unacked;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch (e) { /* AI may be offline; silent */ }
+}
+updateAlertsBadge();
+setInterval(updateAlertsBadge, 30000);
 </script>
-
 </body>
 </html>
